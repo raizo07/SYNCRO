@@ -94,18 +94,20 @@ impl AgentRegistry {
 
         Ok(())
     }
-    
+
 
     /// Revoke an agent's authorization. Admin only.
-    pub fn revoke(env: Env, agent: Address) -> Result<(), Error> {
+    pub fn revoke_agent(env: Env, agent: Address) -> Result<(), Error> {
         Self::require_admin(&env)?;
 
         env.storage()
             .persistent()
             .remove(&DataKey::Agent(agent.clone()));
 
-        env.events()
-            .publish((symbol_short!("agent"), symbol_short!("rev")), agent);
+        env.events().publish(
+            (symbol_short!("agent"), symbol_short!("revoke")),
+            agent,
+        );
 
         Ok(())
     }
@@ -121,6 +123,27 @@ impl AgentRegistry {
             panic!("agent not authorized");
         }
     }
+
+       pub fn has_scope(env: Env, agent: Address, scope: Scope) -> bool {
+        match env
+            .storage()
+            .persistent()
+            .get::<_, u32>(&DataKey::Agent(agent))
+        {
+            Some(mask) => (mask & scope as u32) != 0,
+            None => false,
+        }
+    }
+
+      /// Enforce agent authorization + scope
+    pub fn require_scope(env: Env, agent: Address, scope: Scope) {
+        agent.require_auth();
+
+        if !Self::has_scope(env, agent, scope) {
+            panic!("agent missing required scope");
+        }
+    }
+    
 }
 
 mod test;

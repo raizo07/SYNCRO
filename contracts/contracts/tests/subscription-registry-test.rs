@@ -1,5 +1,5 @@
+use soroban_sdk::{testutils::Address as _, Address, BytesN, Env, String};
 use subscription_registry::{SubscriptionRegistry, SubscriptionRegistryClient};
-use soroban_sdk::{Env, String, Address, BytesN, testutils::Address as _};
 
 #[test]
 fn test_create_subscription() {
@@ -180,15 +180,8 @@ fn test_update_nonexistent_subscription() {
 
     let user = Address::generate(&env);
     let fake_id = BytesN::from_array(&env, &[0u8; 32]);
-    
-    client.update_subscription(
-        &fake_id,
-        &user,
-        &None,
-        &None,
-        &Some(1999i128),
-        &None,
-    );
+
+    client.update_subscription(&fake_id, &user, &None, &None, &Some(1999i128), &None);
 }
 
 #[test]

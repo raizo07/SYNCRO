@@ -28,7 +28,7 @@ fn test_create_subscription() {
     assert_eq!(metadata.billing_interval, billing_interval);
     assert_eq!(metadata.expected_amount, expected_amount);
     assert_eq!(metadata.next_renewal, next_renewal);
-    assert_eq!(metadata.is_active, true);
+    assert!(metadata.is_active);
 
     // Verify subscription is mapped to user
     let user_subs = client.get_user_subscriptions(&user);
@@ -131,7 +131,7 @@ fn test_cancel_subscription() {
 
     // Verify subscription is marked as inactive
     let metadata = client.get_subscription(&subscription_id).unwrap();
-    assert_eq!(metadata.is_active, false);
+    assert!(!metadata.is_active);
 }
 
 #[test]

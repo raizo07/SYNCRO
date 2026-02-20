@@ -1,4 +1,3 @@
-#![no_std]
 use soroban_sdk::{
     contract, contractevent, contractimpl, contracttype, vec, xdr::ToXdr, Address, BytesN, Env,
     String, Vec,
@@ -91,13 +90,9 @@ impl SubscriptionRegistry {
         let mut id_bytes = [0u8; 32];
         let counter_bytes = counter.to_be_bytes();
         let user_bytes = user.clone().to_xdr(&env);
-        for i in 0..8 {
-            id_bytes[i] = counter_bytes[i];
-        }
+        id_bytes[..8].copy_from_slice(&counter_bytes);
         let user_hash = env.crypto().sha256(&user_bytes);
-        for i in 0..24 {
-            id_bytes[i + 8] = user_hash.to_array()[i];
-        }
+        id_bytes[8..32].copy_from_slice(&user_hash.to_array()[..24]);
         let subscription_id = BytesN::from_array(&env, &id_bytes);
 
         let metadata = SubscriptionMetadata {

@@ -1,4 +1,4 @@
-import { daysSince, isExpiredByInactivity, validateExpiryThreshold } from '../src/utils/expiry';
+import { daysSince, isExpiredByInactivity, daysUntilExpiry } from '../src/utils/expiry';
 
 describe('daysSince', () => {
   it('should return 0 for today', () => {
@@ -53,42 +53,27 @@ describe('isExpiredByInactivity', () => {
   });
 });
 
-describe('validateExpiryThreshold', () => {
-  it('should return null for null input', () => {
-    expect(validateExpiryThreshold(null)).toBe(null);
+describe('daysUntilExpiry', () => {
+  it('should return positive days when within threshold', () => {
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+    const createdAt = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+    expect(daysUntilExpiry(tenDaysAgo, createdAt, 30)).toBe(20);
   });
 
-  it('should return null for undefined input', () => {
-    expect(validateExpiryThreshold(undefined)).toBe(null);
+  it('should return zero when exactly at threshold', () => {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const createdAt = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+    expect(daysUntilExpiry(thirtyDaysAgo, createdAt, 30)).toBe(0);
   });
 
-  it('should return valid integer within range', () => {
-    expect(validateExpiryThreshold(30)).toBe(30);
-    expect(validateExpiryThreshold(1)).toBe(1);
-    expect(validateExpiryThreshold(365)).toBe(365);
+  it('should return negative days when past threshold', () => {
+    const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+    const createdAt = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+    expect(daysUntilExpiry(sixtyDaysAgo, createdAt, 30)).toBe(-30);
   });
 
-  it('should parse string numbers', () => {
-    expect(validateExpiryThreshold('90')).toBe(90);
-  });
-
-  it('should throw for zero', () => {
-    expect(() => validateExpiryThreshold(0)).toThrow();
-  });
-
-  it('should throw for negative numbers', () => {
-    expect(() => validateExpiryThreshold(-5)).toThrow();
-  });
-
-  it('should throw for values over 365', () => {
-    expect(() => validateExpiryThreshold(366)).toThrow();
-  });
-
-  it('should throw for non-integer numbers', () => {
-    expect(() => validateExpiryThreshold(30.5)).toThrow();
-  });
-
-  it('should throw for non-numeric strings', () => {
-    expect(() => validateExpiryThreshold('abc')).toThrow();
+  it('should use created_at when last_used_at is null', () => {
+    const twentyDaysAgo = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString();
+    expect(daysUntilExpiry(null, twentyDaysAgo, 60)).toBe(40);
   });
 });

@@ -14,7 +14,6 @@ export interface Subscription {
   renewal_url: string | null;
   notes: string | null;
   tags: string[];
-  expiry_threshold: number | null;
   expired_at: string | null;
   created_at: string;
   updated_at: string;
@@ -34,7 +33,6 @@ export interface SubscriptionCreateInput {
   notes?: string;
   tags?: string[];
   email_account_id?: string;
-  expiry_threshold?: number;
 }
 
 export interface SubscriptionUpdateInput {
@@ -50,5 +48,4 @@ export interface SubscriptionUpdateInput {
   renewal_url?: string;
   notes?: string;
   tags?: string[];
-  expiry_threshold?: number | null;
 }

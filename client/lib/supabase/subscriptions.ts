@@ -30,7 +30,6 @@ export interface Subscription {
   resumes_at?: string
   price_range?: { min: number; max: number }
   price_history?: Array<{ date: string; amount: number }>
-  expiry_threshold?: number | null
   expired_at?: string
 }
 

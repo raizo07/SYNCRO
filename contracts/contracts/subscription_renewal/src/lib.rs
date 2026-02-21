@@ -17,6 +17,13 @@ struct ApprovalKey {
     approval_id: u64,
 }
 
+/// Storage key for executor: sub_id
+#[contracttype]
+#[derive(Clone)]
+struct ExecutorKey {
+    sub_id: u64,
+}
+
 /// Renewal approval bound to subscription, amount, and expiration
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -86,6 +93,17 @@ pub struct ApprovalRejected {
     pub reason: u32, // 1=expired, 2=used, 3=amount_exceeded, 4=not_found
 }
 
+#[contractevent]
+pub struct ExecutorAssigned {
+    pub sub_id: u64,
+    pub executor: Address,
+}
+
+#[contractevent]
+pub struct ExecutorRemoved {
+    pub sub_id: u64,
+}
+
 #[contract]
 pub struct SubscriptionRenewalContract;
 
@@ -139,6 +157,46 @@ impl SubscriptionRenewalContract {
             last_attempt_ledger: 0,
         };
         env.storage().persistent().set(&key, &data);
+    }
+
+    // ── Executor management ───────────────────────────────────────
+
+    /// Assign executor for subscription (owner only)
+    pub fn set_executor(env: Env, sub_id: u64, executor: Address) {
+        let data: SubscriptionData = env
+            .storage()
+            .persistent()
+            .get(&sub_id)
+            .expect("Subscription not found");
+
+        data.owner.require_auth();
+
+        let key = ExecutorKey { sub_id };
+        env.storage().persistent().set(&key, &executor);
+
+        ExecutorAssigned { sub_id, executor }.publish(&env);
+    }
+
+    /// Remove executor (owner only)
+    pub fn remove_executor(env: Env, sub_id: u64) {
+        let data: SubscriptionData = env
+            .storage()
+            .persistent()
+            .get(&sub_id)
+            .expect("Subscription not found");
+
+        data.owner.require_auth();
+
+        let key = ExecutorKey { sub_id };
+        env.storage().persistent().remove(&key);
+
+        ExecutorRemoved { sub_id }.publish(&env);
+    }
+
+    /// Get executor for subscription
+    pub fn get_executor(env: Env, sub_id: u64) -> Option<Address> {
+        let key = ExecutorKey { sub_id };
+        env.storage().persistent().get(&key)
     }
 
     // ── Approval management ───────────────────────────────────────
@@ -242,11 +300,13 @@ impl SubscriptionRenewalContract {
     // ── Renewal logic ─────────────────────────────────────────────
 
     /// Attempt to renew the subscription.
+    /// Callable by owner or assigned executor.
     /// Returns true if renewal is successful (simulated), false if it failed and retry logic was triggered.
     /// limits: max retries allowed.
     /// cooldown: min ledgers between retries.
     pub fn renew(
         env: Env,
+        caller: Address,
         sub_id: u64,
         approval_id: u64,
         amount: i128,
@@ -259,11 +319,6 @@ impl SubscriptionRenewalContract {
             panic!("Protocol is paused");
         }
 
-        // Validate and consume approval
-        if !Self::consume_approval(&env, sub_id, approval_id, amount) {
-            panic!("Invalid or expired approval");
-        }
-
         let key = sub_id;
         let mut data: SubscriptionData = env
             .storage()
@@ -271,7 +326,21 @@ impl SubscriptionRenewalContract {
             .get(&key)
             .expect("Subscription not found");
 
-        // If already failed, we can't renew (or maybe we specifically handle this, but simpler to abort)
+        // Verify caller is owner or executor
+        caller.require_auth();
+        let executor_key = ExecutorKey { sub_id };
+        let executor: Option<Address> = env.storage().persistent().get(&executor_key);
+        
+        if caller != data.owner && Some(caller.clone()) != executor {
+            panic!("Unauthorized: caller must be owner or executor");
+        }
+
+        // Validate and consume approval
+        if !Self::consume_approval(&env, sub_id, approval_id, amount) {
+            panic!("Invalid or expired approval");
+        }
+
+        // If already failed, we can't renew
         if data.state == SubscriptionState::Failed {
             panic!("Subscription is in FAILED state");
         }

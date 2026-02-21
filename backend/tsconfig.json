@@ -23,6 +23,7 @@
   "include": [ "src/**/*"],
   "exclude": [
     "node_modules",
-    "dist"
+    "dist",
+    "src/services/blockchain-service-impl-example.ts"
   ]
 }

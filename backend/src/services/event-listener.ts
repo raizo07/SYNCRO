@@ -98,7 +98,7 @@ export class EventListener {
       }),
     });
 
-    const data = await response.json();
+    const data: any = await response.json();
     return data.result?.events || [];
   }
 
@@ -123,6 +123,8 @@ export class EventListener {
       StateTransition: this.handleStateTransition.bind(this),
       ApprovalCreated: this.handleApprovalCreated.bind(this),
       ApprovalRejected: this.handleApprovalRejected.bind(this),
+      ExecutorAssigned: this.handleExecutorAssigned.bind(this),
+      ExecutorRemoved: this.handleExecutorRemoved.bind(this),
     };
 
     return handlers[eventType];
@@ -235,6 +237,40 @@ export class EventListener {
     };
   }
 
+  private async handleExecutorAssigned(event: ContractEvent): Promise<ProcessedEvent | null> {
+    const { sub_id, executor } = event.value;
+    
+    await supabase
+      .from('subscriptions')
+      .update({ executor_address: executor })
+      .eq('blockchain_sub_id', sub_id);
+
+    return {
+      sub_id,
+      event_type: 'executor_assigned',
+      ledger: event.ledger,
+      tx_hash: event.txHash,
+      event_data: event.value,
+    };
+  }
+
+  private async handleExecutorRemoved(event: ContractEvent): Promise<ProcessedEvent | null> {
+    const { sub_id } = event.value;
+    
+    await supabase
+      .from('subscriptions')
+      .update({ executor_address: null })
+      .eq('blockchain_sub_id', sub_id);
+
+    return {
+      sub_id,
+      event_type: 'executor_removed',
+      ledger: event.ledger,
+      tx_hash: event.txHash,
+      event_data: event.value,
+    };
+  }
+
   private async saveEvents(events: ProcessedEvent[]) {
     const { error } = await supabase
       .from('contract_events')
@@ -277,7 +313,7 @@ export class EventListener {
       }),
     });
 
-    const data = await response.json();
+    const data: any = await response.json();
     return data.result?.sequence || 0;
   }
 

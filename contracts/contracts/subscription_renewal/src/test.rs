@@ -53,7 +53,7 @@ fn test_renew_blocked_when_paused() {
     let user = Address::generate(&env);
     let sub_id = 100;
 
-    client.init_sub(&user, &sub_id);
+    let merchant = Address::generate(&env); client.init_sub(&user, &merchant, &500, &86400, &1000, &sub_id);
     client.approve_renewal(&sub_id, &1, &1000, &100);
     client.set_paused(&true);
 
@@ -68,7 +68,7 @@ fn test_renew_works_after_unpause() {
     let user = Address::generate(&env);
     let sub_id = 101;
 
-    client.init_sub(&user, &sub_id);
+    let merchant = Address::generate(&env); client.init_sub(&user, &merchant, &500, &86400, &1000, &sub_id);
     client.approve_renewal(&sub_id, &1, &1000, &100);
 
     // Pause then unpause
@@ -97,7 +97,7 @@ fn test_renewal_success() {
     let user = Address::generate(&env);
     let sub_id = 123;
 
-    client.init_sub(&user, &sub_id);
+    let merchant = Address::generate(&env); client.init_sub(&user, &merchant, &500, &86400, &1000, &sub_id);
     client.approve_renewal(&sub_id, &1, &1000, &100);
 
     let result = client.renew(&sub_id, &1, &500, &3, &10, &20260115, &true);
@@ -117,7 +117,7 @@ fn test_retry_logic() {
     let max_retries = 2;
     let cooldown = 10;
 
-    client.init_sub(&user, &sub_id);
+    let merchant = Address::generate(&env); client.init_sub(&user, &merchant, &500, &86400, &1000, &sub_id);
 
     // First failure (cycle_id same for retries — allowed because failure doesn't store cycle)
     client.approve_renewal(&sub_id, &1, &1000, &200);
@@ -159,7 +159,7 @@ fn test_cooldown_enforcement() {
     let user = Address::generate(&env);
     let sub_id = 789;
 
-    client.init_sub(&user, &sub_id);
+    let merchant = Address::generate(&env); client.init_sub(&user, &merchant, &500, &86400, &1000, &sub_id);
 
     // Fail once
     client.approve_renewal(&sub_id, &1, &1000, &100);
@@ -177,7 +177,7 @@ fn test_event_emission_on_success() {
     let user = Address::generate(&env);
     let sub_id = 999;
 
-    client.init_sub(&user, &sub_id);
+    let merchant = Address::generate(&env); client.init_sub(&user, &merchant, &500, &86400, &1000, &sub_id);
     client.approve_renewal(&sub_id, &1, &1000, &100);
 
     // Successful renewal should emit RenewalSuccess event
@@ -198,7 +198,7 @@ fn test_zero_max_retries() {
     let sub_id = 111;
     let max_retries = 0;
 
-    client.init_sub(&user, &sub_id);
+    let merchant = Address::generate(&env); client.init_sub(&user, &merchant, &500, &86400, &1000, &sub_id);
     client.approve_renewal(&sub_id, &1, &1000, &100);
 
     // First failure with max_retries = 0 should immediately fail
@@ -219,7 +219,7 @@ fn test_multiple_failures_then_success() {
     let max_retries = 3;
     let cooldown = 10;
 
-    client.init_sub(&user, &sub_id);
+    let merchant = Address::generate(&env); client.init_sub(&user, &merchant, &500, &86400, &1000, &sub_id);
 
     // First failure
     client.approve_renewal(&sub_id, &1, &1000, &200);
@@ -265,7 +265,7 @@ fn test_cannot_renew_failed_subscription() {
     let max_retries = 1;
     let cooldown = 10;
 
-    client.init_sub(&user, &sub_id);
+    let merchant = Address::generate(&env); client.init_sub(&user, &merchant, &500, &86400, &1000, &sub_id);
 
     // Fail twice to reach Failed state
     client.approve_renewal(&sub_id, &1, &1000, &200);
@@ -301,7 +301,7 @@ fn test_approval_required_for_renewal() {
     let sub_id = 500;
     let approval_id = 1;
 
-    client.init_sub(&user, &sub_id);
+    let merchant = Address::generate(&env); client.init_sub(&user, &merchant, &500, &86400, &1000, &sub_id);
 
     // Create approval
     client.approve_renewal(&sub_id, &approval_id, &1000, &100);
@@ -319,7 +319,7 @@ fn test_renewal_without_approval_fails() {
     let user = Address::generate(&env);
     let sub_id = 501;
 
-    client.init_sub(&user, &sub_id);
+    let merchant = Address::generate(&env); client.init_sub(&user, &merchant, &500, &86400, &1000, &sub_id);
 
     // Try to renew without creating approval
     client.renew(&sub_id, &999, &500, &3, &10, &20260901, &true);
@@ -334,7 +334,7 @@ fn test_approval_cannot_be_reused() {
     let sub_id = 502;
     let approval_id = 2;
 
-    client.init_sub(&user, &sub_id);
+    let merchant = Address::generate(&env); client.init_sub(&user, &merchant, &500, &86400, &1000, &sub_id);
     client.approve_renewal(&sub_id, &approval_id, &1000, &100);
 
     // First use - should succeed
@@ -357,7 +357,7 @@ fn test_expired_approval_rejected() {
     let sub_id = 503;
     let approval_id = 3;
 
-    client.init_sub(&user, &sub_id);
+    let merchant = Address::generate(&env); client.init_sub(&user, &merchant, &500, &86400, &1000, &sub_id);
 
     // Create approval that expires at ledger 50
     client.approve_renewal(&sub_id, &approval_id, &1000, &50);
@@ -380,7 +380,7 @@ fn test_amount_exceeds_max_spend() {
     let sub_id = 504;
     let approval_id = 4;
 
-    client.init_sub(&user, &sub_id);
+    let merchant = Address::generate(&env); client.init_sub(&user, &merchant, &500, &86400, &1000, &sub_id);
 
     // Create approval with max_spend = 1000
     client.approve_renewal(&sub_id, &approval_id, &1000, &100);
@@ -396,7 +396,7 @@ fn test_multiple_approvals_for_same_subscription() {
     let user = Address::generate(&env);
     let sub_id = 505;
 
-    client.init_sub(&user, &sub_id);
+    let merchant = Address::generate(&env); client.init_sub(&user, &merchant, &500, &86400, &1000, &sub_id);
 
     // Create multiple approvals
     client.approve_renewal(&sub_id, &1, &1000, &100);
@@ -425,7 +425,7 @@ fn test_duplicate_cycle_rejected_after_success() {
     let sub_id = 600;
     let cycle_id = 20260315;
 
-    client.init_sub(&user, &sub_id);
+    let merchant = Address::generate(&env); client.init_sub(&user, &merchant, &500, &86400, &1000, &sub_id);
 
     // First renewal succeeds — stores cycle_id
     client.approve_renewal(&sub_id, &1, &1000, &100);
@@ -445,7 +445,7 @@ fn test_retry_same_cycle_allowed_after_failure() {
     let sub_id = 601;
     let cycle_id = 20260315;
 
-    client.init_sub(&user, &sub_id);
+    let merchant = Address::generate(&env); client.init_sub(&user, &merchant, &500, &86400, &1000, &sub_id);
 
     // First attempt fails — does NOT store cycle_id
     client.approve_renewal(&sub_id, &1, &1000, &200);
@@ -470,7 +470,7 @@ fn test_different_cycle_allowed_after_success() {
     let user = Address::generate(&env);
     let sub_id = 602;
 
-    client.init_sub(&user, &sub_id);
+    let merchant = Address::generate(&env); client.init_sub(&user, &merchant, &500, &86400, &1000, &sub_id);
 
     // First cycle succeeds
     client.approve_renewal(&sub_id, &1, &1000, &100);
@@ -490,7 +490,7 @@ fn test_first_renewal_always_allowed() {
     let user = Address::generate(&env);
     let sub_id = 603;
 
-    client.init_sub(&user, &sub_id);
+    let merchant = Address::generate(&env); client.init_sub(&user, &merchant, &500, &86400, &1000, &sub_id);
 
     // First renewal ever — no stored cycle, guard passes
     client.approve_renewal(&sub_id, &1, &1000, &100);
@@ -508,7 +508,7 @@ fn test_cancel_sub() {
     let user = Address::generate(&env);
     let sub_id = 600;
 
-    client.init_sub(&user, &sub_id);
+    let merchant = Address::generate(&env); client.init_sub(&user, &merchant, &500, &86400, &1000, &sub_id);
     
     // Cancel subscription
     client.cancel_sub(&sub_id);
@@ -525,7 +525,7 @@ fn test_cannot_cancel_twice() {
     let user = Address::generate(&env);
     let sub_id = 601;
 
-    client.init_sub(&user, &sub_id);
+    let merchant = Address::generate(&env); client.init_sub(&user, &merchant, &500, &86400, &1000, &sub_id);
     
     client.cancel_sub(&sub_id);
     client.cancel_sub(&sub_id);

@@ -1,5 +1,7 @@
 #![no_std]
-use soroban_sdk::{contract, contractevent, contractimpl, contracttype, Address, Env};
+use soroban_sdk::{
+    contract, contractevent, contractimpl, contracttype, xdr::ToXdr, Address, Bytes, Env, IntoVal,
+};
 
 /// Storage keys for contract-level state (admin, pause flag).
 #[contracttype]
@@ -71,6 +73,11 @@ pub enum SubscriptionState {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SubscriptionData {
     pub owner: Address,
+    pub merchant: Address,
+    pub amount: i128,
+    pub frequency: u64,
+    pub spending_cap: i128,
+    pub integrity_hash: soroban_sdk::BytesN<32>,
     pub state: SubscriptionState,
     pub failure_count: u32,
     pub last_attempt_ledger: u32,
@@ -131,6 +138,11 @@ pub struct ApprovalRejected {
 pub struct DuplicateRenewalRejected {
     pub sub_id: u64,
     pub cycle_id: u64,
+}
+
+#[contractevent]
+pub struct IntegrityViolation {
+    pub sub_id: u64,
 }
 
 #[contractevent]
@@ -210,7 +222,9 @@ impl SubscriptionRenewalContract {
             panic!("Protocol is paused");
         }
 
-        let lock_key = RenewalLockKey { lock_sub_id: sub_id };
+        let lock_key = RenewalLockKey {
+            lock_sub_id: sub_id,
+        };
         let current_ledger = env.ledger().sequence();
 
         if let Some(existing) = env
@@ -247,7 +261,9 @@ impl SubscriptionRenewalContract {
 
     /// Release a processing lock for a subscription renewal.
     pub fn release_renewal_lock(env: Env, sub_id: u64) {
-        let lock_key = RenewalLockKey { lock_sub_id: sub_id };
+        let lock_key = RenewalLockKey {
+            lock_sub_id: sub_id,
+        };
         if !env.storage().persistent().has(&lock_key) {
             panic!("No renewal lock to release");
         }
@@ -264,17 +280,41 @@ impl SubscriptionRenewalContract {
 
     /// Query the current renewal lock for a subscription.
     pub fn get_renewal_lock(env: Env, sub_id: u64) -> Option<RenewalLockData> {
-        let lock_key = RenewalLockKey { lock_sub_id: sub_id };
+        let lock_key = RenewalLockKey {
+            lock_sub_id: sub_id,
+        };
         env.storage().persistent().get(&lock_key)
     }
 
     // ── Subscription logic ────────────────────────────────────────
 
     /// Initialize a subscription
-    pub fn init_sub(env: Env, info: Address, sub_id: u64) {
+    pub fn init_sub(
+        env: Env,
+        owner: Address,
+        merchant: Address,
+        amount: i128,
+        frequency: u64,
+        spending_cap: i128,
+        sub_id: u64,
+    ) {
+        let mut integrity_data = soroban_sdk::Vec::<soroban_sdk::Val>::new(&env);
+        integrity_data.push_back(merchant.into_val(&env));
+        integrity_data.push_back(amount.into_val(&env));
+        integrity_data.push_back(frequency.into_val(&env));
+        integrity_data.push_back(spending_cap.into_val(&env));
+
+        // Use a simple hash of the vector of values
+        let integrity_hash = env.crypto().sha256(&integrity_data.to_xdr(&env));
+
         let key = sub_id;
         let data = SubscriptionData {
-            owner: info,
+            owner,
+            merchant,
+            amount,
+            frequency,
+            spending_cap,
+            integrity_hash: integrity_hash.into(),
             state: SubscriptionState::Active,
             failure_count: 0,
             last_attempt_ledger: 0,
@@ -490,7 +530,9 @@ impl SubscriptionRenewalContract {
         }
 
         // 4. Verify renewal lock exists and is not expired
-        let lock_key = RenewalLockKey { lock_sub_id: sub_id };
+        let lock_key = RenewalLockKey {
+            lock_sub_id: sub_id,
+        };
         let lock_data: Option<RenewalLockData> = env.storage().persistent().get(&lock_key);
         match lock_data {
             None => panic!("Renewal lock required"),
@@ -519,6 +561,21 @@ impl SubscriptionRenewalContract {
         // 7. Validate and consume approval
         if !Self::consume_approval(&env, sub_id, approval_id, amount) {
             panic!("Invalid or expired approval");
+        }
+
+        // 7. Validate Integrity Hash
+        let mut integrity_data = soroban_sdk::Vec::<soroban_sdk::Val>::new(&env);
+        integrity_data.push_back(data.merchant.into_val(&env));
+        integrity_data.push_back(data.amount.into_val(&env));
+        integrity_data.push_back(data.frequency.into_val(&env));
+        integrity_data.push_back(data.spending_cap.into_val(&env));
+
+        let current_hash = env.crypto().sha256(&integrity_data.to_xdr(&env));
+        let current_hash_bytes: soroban_sdk::BytesN<32> = current_hash.into();
+
+        if current_hash_bytes.as_ref() != data.integrity_hash.as_ref() {
+            IntegrityViolation { sub_id }.publish(&env);
+            panic!("Subscription integrity violation: parameters tampered");
         }
 
         if succeed {

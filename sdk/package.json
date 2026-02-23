@@ -1,28 +1,21 @@
 {
-  "name": "@syncro/sdk",
-  "version": "1.0.0",
-  "description": "Syncro Backend SDK - Subscription CRUD and Gift Card APIs",
-  "type": "module",
-  "main": "dist/index.cjs",
-  "module": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+    "name": "sdk",
+    "version": "1.0.0",
+    "description": "",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "devDependencies": {
+        "@types/jest": "^30.0.0",
+        "@types/node": "^25.3.0",
+        "axios": "^1.13.5",
+        "jest": "^30.2.0",
+        "ts-jest": "^29.4.6",
+        "ts-node": "^10.9.2",
+        "typescript": "^5.9.3"
     }
-  },
-  "files": ["dist"],
-  "scripts": {
-    "build": "tsup src/index.ts --format cjs,esm --dts --no-splitting"
-  },
-  "devDependencies": {
-    "@types/node": "^20.0.0",
-    "tsup": "^8.0.0",
-    "typescript": "^5.0.0"
-  },
-  "engines": {
-    "node": ">=18"
-  }
 }

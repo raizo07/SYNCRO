@@ -1,67 +1,95 @@
 # Syncro Backend SDK
 
-SDK for Syncro subscription management, including the Gift Card Redemption Helper.
+Subscription CRUD wrapper for the Syncro backend. Developers should use these SDK methods instead of calling raw API endpoints or Soroban contracts directly.
 
-## Gift Card Redemption Helper
+## Features
 
-Attach gift card info to a subscription with validation, backend persistence, and on-chain reference logging.
+- **createSubscription()** – Create subscriptions with validation and backend + on-chain sync
+- **updateSubscription()** – Update subscriptions with validation
+- **getSubscription()** – Fetch a single subscription by ID
+- **cancelSubscription()** – Soft cancel (set status to `cancelled`)
+- **deleteSubscription()** – Permanently delete a subscription
+- **attachGiftCard()** – Attach gift card info (manual and gift-card subscriptions)
 
-### Installation
+Validation, lifecycle events, and sync (backend + on-chain) are handled automatically.
+
+## Installation
 
 ```bash
 npm install @syncro/sdk
-# or from monorepo
-cd sdk && npm install && npm run build
 ```
 
-### Usage
+## Usage
 
-```ts
-import { createSyncroSDK, validateGiftCardHash } from '@syncro/sdk';
+```typescript
+import { createSyncroSDK } from "@syncro/sdk";
 
 const sdk = createSyncroSDK({
-  baseUrl: 'https://your-backend.example.com',
-  credentials: 'include', // for cookie auth
-  // OR for Bearer token:
-  // getAuth: async () => (await getSession())?.access_token ?? null,
+    baseUrl: "https://api.syncro.example.com",
+    getAuth: async () => localStorage.getItem("token") ?? null,
+    credentials: "include", // or omit for Bearer-only
 });
 
-// Listen for gift card events
-sdk.on('giftCard', (event) => {
-  if (event.type === 'attached') {
-    console.log('Gift card attached:', event.data);
-  } else {
-    console.error('Gift card failed:', event.error);
-  }
+// Lifecycle events
+sdk.on("subscription", (event) => {
+    console.log(event.type, event.subscriptionId, event.data);
+});
+sdk.on("giftCard", (event) => {
+    console.log(event.type, event.subscriptionId);
 });
 
-// Attach gift card to subscription
-const result = await sdk.attachGiftCard(
-  subscriptionId,
-  giftCardHash,
-  provider
-);
+// Create
+const result = await sdk.createSubscription({
+    name: "Netflix",
+    price: 15.99,
+    billing_cycle: "monthly",
+    source: "manual", // or 'gift_card'
+});
 
-if (result.success) {
-  console.log('Attached:', result.data);
-  console.log('Transaction hash:', result.blockchain?.transactionHash);
-} else {
-  console.error('Failed:', result.error);
-}
+// Get
+const sub = await sdk.getSubscription(subscriptionId);
 
-// Validate format before calling (optional)
-if (validateGiftCardHash(giftCardHash)) {
-  await sdk.attachGiftCard(subscriptionId, giftCardHash, provider);
-}
+// Update
+await sdk.updateSubscription(subscriptionId, { price: 19.99 });
+
+// Cancel (soft)
+await sdk.cancelSubscription(subscriptionId);
+
+// Delete (hard)
+await sdk.deleteSubscription(subscriptionId);
+
+// Attach gift card
+await sdk.attachGiftCard(subscriptionId, giftCardHash, provider);
 ```
 
-### Gift Card Hash Format
+## API Reference
 
-- 32–64 hexadecimal characters (e.g. SHA-256 hash)
-- Regex: `/^[a-fA-F0-9]{32,64}$/`
+### Options
 
-### API
+- `baseUrl` – Backend API base URL
+- `getAuth?` – Optional async function returning Bearer token
+- `credentials?` – `'include'` | `'omit'` | `'same-origin'` (default: `'include'`)
 
-- `attachGiftCard(subscriptionId, giftCardHash, provider)` – Attach gift card; returns `{ success, data?, error?, blockchain? }`
-- `validateGiftCardHash(hash)` – Validate hash format
-- Events: `giftCard` with payload `{ type: 'attached' | 'failed', subscriptionId, data?, error? }`
+### Methods
+
+| Method                                           | Description                                                    |
+| ------------------------------------------------ | -------------------------------------------------------------- |
+| `createSubscription(input, options?)`            | Create subscription. Emits `subscription` with type `created`. |
+| `getSubscription(id)`                            | Get subscription by ID                                         |
+| `updateSubscription(id, input, options?)`        | Update subscription. Emits `subscription` with type `updated`. |
+| `cancelSubscription(id)`                         | Soft cancel. Emits `subscription` with type `cancelled`.       |
+| `deleteSubscription(id)`                         | Hard delete. Emits `subscription` with type `deleted`.         |
+| `attachGiftCard(subscriptionId, hash, provider)` | Attach gift card. Emits `giftCard` events.                     |
+
+### Events
+
+- **subscription** – `{ type, subscriptionId, data?, error?, blockchain? }`  
+  Types: `created`, `updated`, `cancelled`, `deleted`, `failed`
+- **giftCard** – `{ type, subscriptionId, giftCardHash?, provider?, data?, error? }`  
+  Types: `attached`, `failed`
+
+### Validation
+
+- `validateSubscriptionCreateInput(input)` – Returns `{ isValid, errors }`
+- `validateSubscriptionUpdateInput(input)` – Returns `{ isValid, errors }`
+- `validateGiftCardHash(hash)` – Returns boolean

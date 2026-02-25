@@ -25,6 +25,7 @@ export class SubscriptionService {
   async createSubscription(
     userId: string,
     input: SubscriptionCreateInput,
+    idempotencyKey?: string
   ): Promise<SubscriptionSyncResult> {
     return await DatabaseTransaction.execute(async (client) => {
       try {

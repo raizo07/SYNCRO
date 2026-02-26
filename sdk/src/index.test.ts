@@ -196,6 +196,7 @@ describe("SDK initialization", () => {
 
   it("init(config) should return an SDK instance", () => {
     const sdk = init({
+      apiKey: "test-api-key",
       wallet: { publicKey: "GTESTPUBLICKEY" },
       backendApiBaseUrl: "https://api.syncro.example.com",
     });
@@ -205,6 +206,7 @@ describe("SDK initialization", () => {
 
   it("should emit ready event after successful init", async () => {
     const sdk = init({
+      apiKey: "test-api-key",
       keypair: { publicKey: () => "GKEYPAIRPUBLICKEY" },
       backendApiBaseUrl: "https://api.syncro.example.com",
     });

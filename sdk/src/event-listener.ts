@@ -3,6 +3,9 @@
  * Polls RPC getEvents, emits parsed events, and auto-reconnects on disconnect.
  */
 
+import type { Logger } from "./types.js";
+import { silentLogger } from "./logger.js";
+
 export interface ContractEvent {
   type: string;
   ledger: number;
@@ -208,11 +211,17 @@ export function createEventListener(
   const reconnectDelayMs = options.reconnectDelayMs ?? DEFAULT_RECONNECT_DELAY_MS;
   const maxReconnectAttempts =
     options.maxReconnectAttempts ?? DEFAULT_MAX_RECONNECT_ATTEMPTS;
+  const logger = options.logger ?? silentLogger;
 
   let isRunning = true;
   let lastProcessedLedger = 0;
   let consecutiveFailures = 0;
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  logger.info("Event listener starting", {
+    contractIds: contractIds.length,
+    rpcUrl: options.rpcUrl,
+  });
 
   const stop = () => {
     isRunning = false;
@@ -259,6 +268,8 @@ export function createEventListener(
       if (events.length > 0) {
         const maxLedger = Math.max(...events.map((e) => e.ledger));
 
+        logger.debug("Events received", { count: events.length, fromLedger, toLedger: maxLedger });
+
         for (const raw of events) {
           const parsed = parseEvent(raw);
           if (parsed) onEvent(parsed);
@@ -272,13 +283,24 @@ export function createEventListener(
     } catch (err) {
       consecutiveFailures++;
       const error = err instanceof Error ? err : new Error(String(err));
+      
+      logger.warn("Event listener poll failed", {
+        attempt: consecutiveFailures,
+        maxAttempts: maxReconnectAttempts,
+        error: error.message,
+      });
+      
       onError?.(error);
 
       const backoff = Math.min(
         reconnectDelayMs * Math.pow(2, consecutiveFailures - 1),
         MAX_BACKOFF_MS
       );
+      
       if (consecutiveFailures >= maxReconnectAttempts) {
+        logger.warn("Max reconnection attempts reached, applying backoff", {
+          backoffMs: backoff,
+        });
         setTimeout(poll, backoff);
       } else {
         setTimeout(poll, pollIntervalMs);

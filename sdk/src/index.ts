@@ -36,43 +36,6 @@ export interface CancellationResult {
   };
 }
 
-<<<<<<< fix/issue-99
-export interface StellarWallet {
-  publicKey?: string | (() => string);
-  signTransaction?: (...args: any[]) => any;
-  sign?: (...args: any[]) => any;
-  [key: string]: any;
-}
-
-export interface StellarKeypair {
-  publicKey: string | (() => string);
-  secret?: () => string;
-  sign?: (...args: any[]) => any;
-  [key: string]: any;
-}
-
-export interface SyncroSDKConfig {
-  apiKey?: string | undefined;
-  baseUrl?: string | undefined;
-  wallet?: StellarWallet | undefined;
-  keypair?: StellarKeypair | undefined;
-}
-
-export interface SyncroSDKInitConfig {
-  wallet?: StellarWallet | undefined;
-  keypair?: StellarKeypair | undefined;
-  backendApiBaseUrl: string;
-  apiKey?: string | undefined;
-}
-
-export interface RetryConfig {
-    retries?: number;
-    retryDelay?: (retryCount: number) => number;
-    retryCondition?: (error: any) => boolean;
-}
-
-=======
->>>>>>> main
 export class SyncroSDK extends EventEmitter {
   private client: AxiosInstance;
   private apiKey: string;
@@ -320,6 +283,11 @@ export class SyncroSDK extends EventEmitter {
       const errorMessage = error.response?.data?.error || error.message;
       this.log("Error cancelling subscription:", subscriptionId, errorMessage);
 
+      this.logger.error("Subscription cancellation failed", {
+        subscriptionId,
+        error: errorMessage,
+      });
+
       const failedResult: any = {
         success: false,
         status: "failed",
@@ -353,12 +321,14 @@ export class SyncroSDK extends EventEmitter {
     const cacheKey = `syncro_subs_${this.apiKey}`;
 
     try {
+      this.logger.info("Fetching user subscriptions");
       let allSubscriptions: any[] = [];
       let offset = 0;
       const limit = 50;
       let hasMore = true;
 
       while (hasMore) {
+        this.logger.debug("Fetching subscriptions batch", { offset, limit });
         const response = await this.client.get("/subscriptions", {
           params: { limit, offset },
         });
@@ -385,6 +355,9 @@ export class SyncroSDK extends EventEmitter {
       this.updateCache(cacheKey, normalized);
       this.log(`Fetched ${normalized.length} subscriptions`);
 
+      this.logger.info("User subscriptions fetched successfully", {
+        count: normalized.length,
+      });
       return normalized;
     } catch (error) {
       // Offline/Error support: Check cache
@@ -395,6 +368,9 @@ export class SyncroSDK extends EventEmitter {
         );
         return cached;
       }
+      this.logger.error("Failed to fetch subscriptions", {
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     }
   }

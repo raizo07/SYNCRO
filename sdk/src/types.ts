@@ -8,3 +8,5 @@ export interface GiftCardEvent {
   data?: Record<string, unknown>;
   error?: string;
 }
+
+export type { Logger } from './logger.js';

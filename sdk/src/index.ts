@@ -1,6 +1,7 @@
 import axios, { type AxiosInstance } from "axios";
 import { EventEmitter } from "node:events";
-import type { GiftCardEvent, GiftCardEventType } from "./types";
+import type { GiftCardEvent, GiftCardEventType, Logger } from "./types.js";
+import { silentLogger } from "./logger.js";
 
 export interface Subscription {
   id: string;
@@ -47,6 +48,7 @@ export interface SyncroSDKConfig {
   baseUrl?: string | undefined;
   wallet?: StellarWallet | undefined;
   keypair?: StellarKeypair | undefined;
+  logger?: Logger | undefined;
 }
 
 export interface SyncroSDKInitConfig {
@@ -54,6 +56,7 @@ export interface SyncroSDKInitConfig {
   keypair?: StellarKeypair | undefined;
   backendApiBaseUrl: string;
   apiKey?: string | undefined;
+  logger?: Logger | undefined;
 }
 
 export class SyncroSDK extends EventEmitter {
@@ -61,12 +64,14 @@ export class SyncroSDK extends EventEmitter {
   private apiKey?: string | undefined;
   private wallet?: StellarWallet | undefined;
   private keypair?: StellarKeypair | undefined;
+  private logger: Logger;
 
   constructor(config: SyncroSDKConfig) {
     super();
     this.apiKey = config.apiKey ?? undefined;
     this.wallet = config.wallet ?? undefined;
     this.keypair = config.keypair ?? undefined;
+    this.logger = config.logger ?? silentLogger;
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -91,6 +96,7 @@ export class SyncroSDK extends EventEmitter {
     subscriptionId: string,
   ): Promise<CancellationResult> {
     try {
+      this.logger.info("Starting subscription cancellation", { subscriptionId });
       this.emit("cancelling", { subscriptionId });
 
       const response = await this.client.post(
@@ -106,10 +112,19 @@ export class SyncroSDK extends EventEmitter {
         blockchain: blockchain,
       };
 
+      this.logger.info("Subscription cancelled successfully", {
+        subscriptionId,
+        blockchainSynced: blockchain?.synced,
+      });
       this.emit("success", result);
       return result;
     } catch (error: any) {
       const errorMessage = error.response?.data?.error || error.message;
+
+      this.logger.error("Subscription cancellation failed", {
+        subscriptionId,
+        error: errorMessage,
+      });
 
       const failedResult: any = {
         success: false,
@@ -142,12 +157,14 @@ export class SyncroSDK extends EventEmitter {
     const cacheKey = `syncro_subs_${this.apiKey}`;
 
     try {
+      this.logger.info("Fetching user subscriptions");
       let allSubscriptions: any[] = [];
       let offset = 0;
       const limit = 50;
       let hasMore = true;
 
       while (hasMore) {
+        this.logger.debug("Fetching subscriptions batch", { offset, limit });
         const response = await this.client.get("/subscriptions", {
           params: { limit, offset },
         });
@@ -173,16 +190,26 @@ export class SyncroSDK extends EventEmitter {
       // Update cache
       this.updateCache(cacheKey, normalized);
 
+      this.logger.info("User subscriptions fetched successfully", {
+        count: normalized.length,
+      });
       return normalized;
     } catch (error) {
       // Offline/Error support: Check cache
       const cached = this.getCache(cacheKey);
       if (cached) {
-        console.warn(
-          "SyncroSDK: Network error, returning cached subscriptions.",
+        this.logger.warn(
+          "Network error, returning cached subscriptions",
+          {
+            cachedCount: cached.length,
+            error: error instanceof Error ? error.message : String(error),
+          }
         );
         return cached;
       }
+      this.logger.error("Failed to fetch subscriptions", {
+        error: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     }
   }
@@ -311,6 +338,7 @@ export function init(config: SyncroSDKInitConfig): SyncroSDK {
     baseUrl: config.backendApiBaseUrl,
     wallet: config.wallet,
     keypair: config.keypair,
+    logger: config.logger,
   });
 
   const readyPayload = {
@@ -326,4 +354,4 @@ export function init(config: SyncroSDKInitConfig): SyncroSDK {
 }
 
 export default SyncroSDK;
-export type { GiftCardEvent, GiftCardEventType } from "./types";
+export type { GiftCardEvent, GiftCardEventType, Logger } from "./types.js";

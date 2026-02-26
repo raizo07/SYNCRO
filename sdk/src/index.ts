@@ -36,6 +36,43 @@ export interface CancellationResult {
   };
 }
 
+<<<<<<< fix/issue-99
+export interface StellarWallet {
+  publicKey?: string | (() => string);
+  signTransaction?: (...args: any[]) => any;
+  sign?: (...args: any[]) => any;
+  [key: string]: any;
+}
+
+export interface StellarKeypair {
+  publicKey: string | (() => string);
+  secret?: () => string;
+  sign?: (...args: any[]) => any;
+  [key: string]: any;
+}
+
+export interface SyncroSDKConfig {
+  apiKey?: string | undefined;
+  baseUrl?: string | undefined;
+  wallet?: StellarWallet | undefined;
+  keypair?: StellarKeypair | undefined;
+}
+
+export interface SyncroSDKInitConfig {
+  wallet?: StellarWallet | undefined;
+  keypair?: StellarKeypair | undefined;
+  backendApiBaseUrl: string;
+  apiKey?: string | undefined;
+}
+
+export interface RetryConfig {
+    retries?: number;
+    retryDelay?: (retryCount: number) => number;
+    retryCondition?: (error: any) => boolean;
+}
+
+=======
+>>>>>>> main
 export class SyncroSDK extends EventEmitter {
   private client: AxiosInstance;
   private apiKey: string;

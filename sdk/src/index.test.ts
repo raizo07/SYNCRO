@@ -1,17 +1,32 @@
-import axios from "axios";
-import { SyncroSDK } from "./index";
+import { jest, describe, it, expect, beforeEach } from "@jest/globals";
 
-jest.mock("axios");
-const mockedAxios = axios as jest.Mocked<typeof axios>;
+const mAxios = {
+  get: jest.fn(),
+  post: jest.fn(),
+  delete: jest.fn(),
+  patch: jest.fn(),
+  create: jest.fn().mockReturnThis(),
+};
+
+// We must mock axios BEFORE importing the SDK
+jest.unstable_mockModule("axios", () => ({
+  default: mAxios,
+  ...mAxios,
+}));
+
+// Dynamic imports are required when using unstable_mockModule
+const { SyncroSDK, init } = await import("./index.js");
+const axios = (await import("axios")).default as any;
 
 describe("SyncroSDK", () => {
-  let sdk: SyncroSDK;
+  let sdk: InstanceType<typeof SyncroSDK>;
   const apiKey = "test-api-key";
 
   beforeEach(() => {
-    mockedAxios.create.mockReturnValue(mockedAxios as any);
-    sdk = new SyncroSDK({ apiKey });
     jest.clearAllMocks();
+    sdk = new SyncroSDK({ apiKey });
+    // Add a dummy error listener to prevent unhandled error throws from EventEmitter
+    sdk.on("error", () => {});
   });
 
   describe("cancelSubscription", () => {
@@ -33,7 +48,7 @@ describe("SyncroSDK", () => {
         },
       };
 
-      mockedAxios.post.mockResolvedValueOnce(mockResponse);
+      axios.post.mockResolvedValueOnce(mockResponse);
 
       const successSpy = jest.fn();
       const cancellingSpy = jest.fn();
@@ -55,16 +70,14 @@ describe("SyncroSDK", () => {
         }),
       );
 
-      expect(mockedAxios.post).toHaveBeenCalledWith(
-        `/subscriptions/${subId}/cancel`,
-      );
+      expect(axios.post).toHaveBeenCalledWith(`/subscriptions/${subId}/cancel`);
     });
 
     it("should handle cancellation error and emit failure event", async () => {
       const subId = "sub-456";
       const errorMessage = "Subscription not found";
 
-      mockedAxios.post.mockRejectedValueOnce({
+      axios.post.mockRejectedValueOnce({
         response: {
           data: { error: errorMessage },
         },
@@ -84,98 +97,136 @@ describe("SyncroSDK", () => {
     });
   });
 
-  describe("approveRenewal", () => {
-    it("should return success with receipt when approval is recorded on-chain", async () => {
-      const subscriptionId = "sub-789";
-      mockedAxios.post.mockResolvedValueOnce({
+  describe("getUserSubscriptions", () => {
+    it("should fetch, merge, and normalize subscriptions from multiple pages", async () => {
+      const mockPage1 = {
         data: {
-          success: true,
-          blockchain: {
-            synced: true,
-            transactionHash: "0xrenewal123",
-          },
+          data: [
+            {
+              id: "1",
+              name: "Netflix",
+              status: "active",
+              next_billing_date: "2024-03-01",
+            },
+          ],
+          pagination: { total: 2, limit: 1, offset: 0 },
         },
-      });
-
-      const result = await sdk.approveRenewal(subscriptionId, 2500, 123456);
-
-      expect(result).toEqual({
-        success: true,
-        subscriptionId,
-        maxAmount: 2500,
-        expiry: 123456,
-        receipt: {
-          transactionHash: "0xrenewal123",
-          status: "confirmed",
+      };
+      const mockPage2 = {
+        data: {
+          data: [
+            {
+              id: "2",
+              name: "Spotify",
+              status: "paused",
+              next_billing_date: "2024-03-15",
+            },
+          ],
+          pagination: { total: 2, limit: 1, offset: 1 },
         },
-      });
-      expect(mockedAxios.post).toHaveBeenCalledWith(
-        `/subscriptions/${subscriptionId}/approve-renewal`,
-        { maxAmount: 2500, expiry: 123456 },
-      );
+      };
+
+      axios.get
+        .mockResolvedValueOnce(mockPage1)
+        .mockResolvedValueOnce(mockPage2);
+
+      const subs = await sdk.getUserSubscriptions();
+
+      expect(subs).toHaveLength(2);
+      expect(subs[0]?.name).toBe("Netflix");
+      expect(subs[0]?.state).toBe("active"); // Normalized
+      expect(subs[0]?.nextRenewal).toBe("2024-03-01"); // Normalized
+      expect(subs[1]?.name).toBe("Spotify");
+      expect(subs[1]?.state).toBe("paused"); // Normalized
+
+      expect(axios.get).toHaveBeenCalledTimes(2);
     });
 
-    it("should return failure when blockchain sync is not confirmed", async () => {
-      const subscriptionId = "sub-790";
-      mockedAxios.post.mockResolvedValueOnce({
-        data: {
-          success: true,
-          blockchain: {
-            synced: false,
-            error: "Sync failed",
-          },
+    it("should return cached data when network fails", async () => {
+      const cachedData = [
+        {
+          id: "1",
+          name: "Netflix",
+          state: "active",
+          nextRenewal: "2024-03-01",
         },
+      ];
+
+      const localStorageMock = (() => {
+        let store: any = {};
+        return {
+          getItem: (key: string) => store[key] || null,
+          setItem: (key: string, value: string) => {
+            store[key] = value.toString();
+          },
+          clear: () => {
+            store = {};
+          },
+        };
+      })();
+      Object.defineProperty(global, "window", {
+        value: { localStorage: localStorageMock },
+        writable: true,
+        configurable: true,
+      });
+      Object.defineProperty(global, "localStorage", {
+        value: localStorageMock,
+        writable: true,
+        configurable: true,
       });
 
-      const result = await sdk.approveRenewal(subscriptionId, 3000, 123457);
+      localStorage.setItem(
+        `syncro_subs_${apiKey}`,
+        JSON.stringify({ data: cachedData }),
+      );
 
-      expect(result.success).toBe(false);
-      expect(result.error).toBe("Sync failed");
-      expect(result.subscriptionId).toBe(subscriptionId);
+      axios.get.mockRejectedValueOnce(new Error("Network Error"));
+
+      const subs = await sdk.getUserSubscriptions();
+      expect(subs).toEqual(cachedData);
+    });
+  });
+});
+
+describe("SDK initialization", () => {
+  beforeEach(() => {
+    axios.create.mockReturnValue(axios as any);
+    jest.clearAllMocks();
+  });
+
+  it("init(config) should return an SDK instance", () => {
+    const sdk = init({
+      wallet: { publicKey: "GTESTPUBLICKEY" },
+      backendApiBaseUrl: "https://api.syncro.example.com",
+    });
+
+    expect(sdk).toBeInstanceOf(SyncroSDK);
+  });
+
+  it("should emit ready event after successful init", async () => {
+    const sdk = init({
+      keypair: { publicKey: () => "GKEYPAIRPUBLICKEY" },
+      backendApiBaseUrl: "https://api.syncro.example.com",
+    });
+
+    const readySpy = jest.fn();
+    sdk.on("ready", readySpy);
+
+    await Promise.resolve();
+
+    expect(readySpy).toHaveBeenCalledWith({
+      backendApiBaseUrl: "https://api.syncro.example.com",
+      publicKey: "GKEYPAIRPUBLICKEY",
     });
   });
 
-  describe("approveRenewals", () => {
-    it("should return per-subscription results for batch approvals", async () => {
-      mockedAxios.post
-        .mockResolvedValueOnce({
-          data: {
-            success: true,
-            receipt: {
-              transactionHash: "0xbatch1",
-              status: "success",
-            },
-          },
-        })
-        .mockRejectedValueOnce({
-          response: {
-            data: { error: "Approval denied" },
-          },
-        });
-
-      const results = await sdk.approveRenewals([
-        { subscriptionId: "sub-a", maxAmount: 1500, expiry: 50001 },
-        { subscriptionId: "sub-b", maxAmount: 2000, expiry: 50002 },
-      ]);
-
-      expect(results).toHaveLength(2);
-      expect(results[0]).toEqual({
-        success: true,
-        subscriptionId: "sub-a",
-        maxAmount: 1500,
-        expiry: 50001,
-        receipt: {
-          transactionHash: "0xbatch1",
-          status: "success",
-        },
-      });
-      expect(results[1]).toEqual({
-        success: false,
-        subscriptionId: "sub-b",
-        maxAmount: 2000,
-        expiry: 50002,
-        error: "Approval denied",
-      });
-    });
+  it("should throw descriptive errors for invalid configuration", () => {
+    expect(() =>
+      init({
+        backendApiBaseUrl: "not-a-url",
+      } as any),
+    ).toThrow(
+      "Invalid SDK initialization config: backendApiBaseUrl must be a valid URL. Provide either a wallet object or a keypair.",
+    );
   });
 });

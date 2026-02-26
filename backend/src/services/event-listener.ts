@@ -131,11 +131,8 @@ export class EventListener {
       StateTransition: this.handleStateTransition.bind(this),
       ApprovalCreated: this.handleApprovalCreated.bind(this),
       ApprovalRejected: this.handleApprovalRejected.bind(this),
-      DuplicateRenewalRejected: this.handleDuplicateRenewalRejected.bind(this),
-      RenewalLockAcquired: this.handleRenewalLockAcquired.bind(this),
-      RenewalLockReleased: this.handleRenewalLockReleased.bind(this),
-      RenewalLockExpired: this.handleRenewalLockExpired.bind(this),
-      LifecycleTimestampUpdated: this.handleLifecycleTimestampUpdated.bind(this),
+      ExecutorAssigned: this.handleExecutorAssigned.bind(this),
+      ExecutorRemoved: this.handleExecutorRemoved.bind(this),
     };
 
     return handlers[eventType];
@@ -261,81 +258,34 @@ export class EventListener {
     };
   }
 
-  private async handleDuplicateRenewalRejected(event: ContractEvent): Promise<ProcessedEvent | null> {
-    const { sub_id, cycle_id } = event.value;
-
-    logger.warn('Duplicate renewal rejected by contract', { sub_id, cycle_id });
-
-    return {
-      sub_id,
-      event_type: 'duplicate_renewal_rejected',
-      ledger: event.ledger,
-      tx_hash: event.txHash,
-      event_data: event.value,
-    };
-  }
-
-  private async handleRenewalLockAcquired(event: ContractEvent): Promise<ProcessedEvent | null> {
-    const { sub_id, locked_at, lock_timeout } = event.value;
-
-    logger.info('Renewal lock acquired on-chain', { sub_id, locked_at, lock_timeout });
-
-    return {
-      sub_id,
-      event_type: 'renewal_lock_acquired',
-      ledger: event.ledger,
-      tx_hash: event.txHash,
-      event_data: event.value,
-    };
-  }
-
-  private async handleRenewalLockReleased(event: ContractEvent): Promise<ProcessedEvent | null> {
-    const { sub_id, released_at } = event.value;
-
-    logger.info('Renewal lock released on-chain', { sub_id, released_at });
-
-    return {
-      sub_id,
-      event_type: 'renewal_lock_released',
-      ledger: event.ledger,
-      tx_hash: event.txHash,
-      event_data: event.value,
-    };
-  }
-
-  private async handleRenewalLockExpired(event: ContractEvent): Promise<ProcessedEvent | null> {
-    const { sub_id, original_locked_at, expired_at } = event.value;
-
-    logger.warn('Renewal lock expired on-chain', { sub_id, original_locked_at, expired_at });
-
-    return {
-      sub_id,
-      event_type: 'renewal_lock_expired',
-      ledger: event.ledger,
-      tx_hash: event.txHash,
-      event_data: event.value,
-    };
-  }
-
-  private async handleLifecycleTimestampUpdated(event: ContractEvent): Promise<ProcessedEvent | null> {
-    const { sub_id, event_kind, timestamp } = event.value;
-
-    const column = LIFECYCLE_COLUMN_MAP[event_kind];
-    if (!column) {
-      logger.warn('Unknown lifecycle event_kind', { sub_id, event_kind });
-      return null;
-    }
-
+  private async handleExecutorAssigned(event: ContractEvent): Promise<ProcessedEvent | null> {
+    const { sub_id, executor } = event.value;
+    
     await supabase
       .from('subscriptions')
-      .update({ [column]: timestamp })
+      .update({ executor_address: executor })
       .eq('blockchain_sub_id', sub_id);
-
-    logger.info('Lifecycle timestamp updated', { sub_id, column, timestamp });
 
     return {
       sub_id,
-      event_type: 'lifecycle_timestamp_updated',
+      event_type: 'executor_assigned',
+      ledger: event.ledger,
+      tx_hash: event.txHash,
+      event_data: event.value,
+    };
+  }
+
+  private async handleExecutorRemoved(event: ContractEvent): Promise<ProcessedEvent | null> {
+    const { sub_id } = event.value;
+    
+    await supabase
+      .from('subscriptions')
+      .update({ executor_address: null })
+      .eq('blockchain_sub_id', sub_id);
+
+    return {
+      sub_id,
+      event_type: 'executor_removed',
       ledger: event.ledger,
       tx_hash: event.txHash,
       event_data: event.value,
